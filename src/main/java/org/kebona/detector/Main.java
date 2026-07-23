@@ -1,23 +1,30 @@
 package org.kebona.detector;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
-import org.kebona.detector.model.*;
-import org.kebona.detector.registry.*;
-
-import org.kebona.detector.loader.*;
-import org.kebona.detector.detection.*;
-import org.kebona.detector.graph.*;
-
-import org.kebona.detector.verification.*;
+import org.kebona.detector.detection.AlignmentDetector;
+import org.kebona.detector.detection.AnnotationProvenanceDetector;
+import org.kebona.detector.detection.EquivalentClassDetector;
+import org.kebona.detector.detection.ImportsDetector;
+import org.kebona.detector.detection.ReuseDetector;
+import org.kebona.detector.graph.Graph;
+import org.kebona.detector.graph.ReuseGraphBuilder;
+import org.kebona.detector.loader.CatalogBuilder;
+import org.kebona.detector.loader.OntologyLoader;
+import org.kebona.detector.model.OntologyRecord;
+import org.kebona.detector.model.PipelineContext;
+import org.kebona.detector.model.ReuseRelationship;
+import org.kebona.detector.model.VerificationResult;
 import org.kebona.detector.output.CliReporter;
 import org.kebona.detector.output.JsonResultWriter;
+import org.kebona.detector.registry.RegistryLoader;
+import org.kebona.detector.verification.Verifier;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 
@@ -29,7 +36,7 @@ public class Main {
     private final Path outpuPath;
 
     private final RegistryLoader registryLoader;
-    private List<ReuseDetector> detectors = new ArrayList<>();
+    private final List<ReuseDetector> detectors = new ArrayList<>();
 
     private Verifier verifier;
     private CliReporter cliReporter;
@@ -43,7 +50,13 @@ public class Main {
 
         /** Loading and detecting stages */
         this.registryLoader = new RegistryLoader();
+
+        /** Adds all the detectors. */
         this.detectors.add(new ImportsDetector());
+        this.detectors.add(new AlignmentDetector());
+        this.detectors.add(new AnnotationProvenanceDetector());
+        this.detectors.add(new EquivalentClassDetector());
+
     }
 
     public static void main(String[] args) {
