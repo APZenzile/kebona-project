@@ -3,6 +3,8 @@ package org.kebona.detector.model;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.kebona.detector.graph.Graph;
+
 /**
  * The global pipeline data carry across all pipeline stages.
  *
@@ -19,8 +21,10 @@ public class PipelineContext {
 
     /** list of ontology records from the registry loader */
     private List<OntologyRecord> registry = new ArrayList<>();
-    /** list of re-use relations for each ontology detected */
+    /** list of direct re-use relations detected per ontology */
     private List<ReuseRelationship> relationships = new ArrayList<>();
+    /** corpus-wide adjacency graph over the direct relationships */
+    private Graph reuseGraph;
     /** list of verfication on each of the relations */
     private List<VerificationResult> verifications = new ArrayList<>();
 
@@ -46,23 +50,27 @@ public class PipelineContext {
 
     /**
      * @brief add the relationships associated with each ontology
-     * 
+     *
      * @param relations the relationships one ontology holds
      *                  with the ontologies it uses.
-     * 
+     *
      */
     public void addRelationships(List<ReuseRelationship> relations) {
         this.relationships.addAll(relations);
     }
 
+    public Graph getReuseGraph() {
+        return reuseGraph;
+    }
+
     /**
-     * @brief resets the relationship after the graph has been build
-     * 
-     * @param relationships the re-built list of relationships by the graph.
-     * 
+     * @brief stores the corpus-wide reuse graph, built once after all
+     *        detection is complete.
+     *
+     * @param reuseGraph the populated graph from ReuseGraphBuilder.
      */
-    public void setRelationships(List<ReuseRelationship> relationships) {
-        this.relationships = relationships;
+    public void setReuseGraph(Graph reuseGraph) {
+        this.reuseGraph = reuseGraph;
     }
 
     public List<VerificationResult> getVerifications() {
@@ -72,7 +80,7 @@ public class PipelineContext {
     /**
      * @brief adds a verification for each relation that
      *        exists between ontologies
-     * 
+     *
      * @param verification the verfication object.
      */
     public void addVerification(VerificationResult verification) {
@@ -81,7 +89,7 @@ public class PipelineContext {
 
     /**
      * @brief Appends a batch at once, if verification is ever run/returned in bulk.
-     * 
+     *
      * @param batchVerifications the bulk of verifications.
      */
     public void addVerifications(List<VerificationResult> batchVerifications) {

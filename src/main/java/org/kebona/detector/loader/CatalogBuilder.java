@@ -19,8 +19,6 @@ public class CatalogBuilder {
 
     public OWLOntologyIRIMapper buildMapper(Path ontologyDirectory) {
         File dir = ontologyDirectory.toFile();
-        // recursive = true: safe even if the download directory ends up
-        // organised into subfolders (e.g. by working set) later.
         return new AutoIRIMapper(dir, true);
     }
 }

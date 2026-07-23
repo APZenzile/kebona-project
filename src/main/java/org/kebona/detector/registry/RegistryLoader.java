@@ -1,6 +1,7 @@
 package org.kebona.detector.registry;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,10 +17,10 @@ public class RegistryLoader {
     public RegistryLoader() {
     }
 
-    public List<OntologyRecord> load(String registryPath) {
+    public List<OntologyRecord> load(Path registryPath) {
 
         ObjectMapper mapper = new ObjectMapper();
-        File file = new File(registryPath);
+        File file = registryPath.toFile();
 
         /** convert json to java */
         Ontology[] ontologies = null;
