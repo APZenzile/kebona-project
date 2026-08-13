@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import org.kebona.detector.model.OntologyRecord;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.model.MissingImportHandlingStrategy;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyID;
@@ -25,6 +26,11 @@ public class OntologyLoader {
     public OntologyLoader(OWLOntologyIRIMapper catalogMapper) {
         this.manager = OWLManager.createOWLOntologyManager();
         this.manager.getIRIMappers().add(catalogMapper);
+        this.manager.setOntologyLoaderConfiguration(
+                this.manager.getOntologyLoaderConfiguration()
+                        .setConnectionTimeout(100000)
+                        .setMissingImportHandlingStrategy(
+                                MissingImportHandlingStrategy.SILENT));
     }
 
     public OWLOntology load(OntologyRecord record) throws OWLOntologyCreationException {
