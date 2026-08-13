@@ -34,34 +34,37 @@ public class EquivalentClassDetector implements ReuseDetector {
 
         ontology.axioms(AxiomType.EQUIVALENT_CLASSES).forEach(axiom -> {
             List<OWLClass> classes = axiom.getClassExpressions().stream()
-                    .filter(ce -> !ce.isAnonymous())
-                    .map(ce -> ce.asOWLClass())
-                    .toList();
+                    .flatMap(ce -> ce.getClassesInSignature().stream()).toList();
 
-            if (classes.size() != 2) {
-                return; // 3+ way equivalence -- corner case, not designed for yet
+            OWLClass ownClass = null;
+
+            for (OWLClass clazz : classes) {
+                if (belongsToOntology(clazz, ownIri)) {
+                    ownClass = clazz;
+                    break;
+                }
             }
 
-            OWLClass first = classes.get(0);
-            OWLClass second = classes.get(1);
-            OWLClass ownClass = belongsToOntology(first, ownIri) ? first
-                    : belongsToOntology(second, ownIri) ? second : null;
-            OWLClass externalClass = ownClass == first ? second : ownClass == second ? first : null;
+            for (OWLClass externalClass : classes) {
 
-            if (ownClass == null || externalClass == null) {
-                return;
+                if (externalClass.equals(ownClass)) {
+                    continue;
+                }
+
+                String declaredIri = externalClass.getIRI().toString();
+                Optional<OntologyRecord> matched = IriRegistryMatcher.matchEntity(declaredIri, registry);
+                boolean inCorpus = matched.isPresent();
+                String reusedAcronym = matched.map(OntologyRecord::getAcronym)
+                        .orElseGet(() -> IriRegistryMatcher.guessAcronym(declaredIri));
+                boolean pinned = IriRegistryMatcher.looksVersionPinned(declaredIri);
+
+                relationships.add(new ReuseRelationship(
+                        record.getAcronym(),
+                        reusedAcronym,
+                        inCorpus,
+                        ReuseMechanism.EQUIVALENT_CLASS,
+                        declaredIri, pinned));
             }
-
-            String declaredIri = externalClass.getIRI().toString();
-            Optional<OntologyRecord> matched = IriRegistryMatcher.match(declaredIri, registry);
-            boolean inCorpus = matched.isPresent();
-            String reusedAcronym = matched.map(OntologyRecord::getAcronym)
-                    .orElseGet(() -> IriRegistryMatcher.guessAcronym(declaredIri));
-            boolean pinned = IriRegistryMatcher.looksVersionPinned(declaredIri);
-
-            relationships.add(new ReuseRelationship(
-                    record.getAcronym(), reusedAcronym, inCorpus,
-                    ReuseMechanism.EQUIVALENT_CLASS, declaredIri, pinned));
         });
 
         return relationships;
