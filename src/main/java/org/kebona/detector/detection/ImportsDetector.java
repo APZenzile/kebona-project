@@ -32,8 +32,12 @@ public class ImportsDetector implements ReuseDetector {
             boolean pinned = IriRegistryMatcher.looksVersionPinned(declaredIri);
 
             relationships.add(new ReuseRelationship(
-                    record.getAcronym(), reusedAcronym, inCorpus,
-                    ReuseMechanism.IMPORTS, declaredIri, pinned));
+                    record.getAcronym(),
+                    reusedAcronym,
+                    inCorpus,
+                    ReuseMechanism.IMPORTS,
+                    declaredIri,
+                    pinned));
         });
 
         return relationships;
