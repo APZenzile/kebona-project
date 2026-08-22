@@ -1,10 +1,12 @@
 package org.kebona.detector.detection;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-// import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.kebona.detector.model.OntologyRecord;
 import org.kebona.detector.model.ReuseMechanism;
@@ -19,6 +21,7 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyLoaderConfiguration;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
+import org.semanticweb.owlapi.model.parameters.Imports;
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 
 /**
@@ -47,7 +50,7 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
             IRI.create("http://purl.org/dc/terms/source"),
             IRI.create("http://www.geneontology.org/formats/oboInOwl#hasDbXref"));
 
-    // // recognized ontology-hosting conventions
+    // recognized ontology-hosting conventions
     // private static final Pattern ONTOLOGY_IRI_SHAPE = Pattern.compile(
     // "^https?://(purl\\.obolibrary\\.org/obo/|w3id\\.org/(emmo|.*ontology)).*",
     // Pattern.CASE_INSENSITIVE);
@@ -61,9 +64,14 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
     public List<ReuseRelationship> detect(OWLOntology ontology, OntologyRecord record,
             List<OntologyRecord> registry) {
         List<ReuseRelationship> relationships = new ArrayList<>();
+        Set<IRI> ownSignature = computeNativeSignature(record, ontology);
+        Set<String> seenAcronyms = new HashSet<>();
+        Set<String> seenIRIs = new HashSet<>();
+
         String ownIri = record.getOntologyIri();
 
-        ontology.axioms(AxiomType.ANNOTATION_ASSERTION).forEach(assertion -> {
+        ontology.axioms(AxiomType.ANNOTATION_ASSERTION, Imports.EXCLUDED).forEach(assertion -> {
+
             IRI propertyIri = assertion.getProperty().getIRI();
 
             /** The IRI is not one of those we want to assess */
@@ -78,8 +86,22 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
                 return;
             }
 
-            /** It references the same owl file. */
+            String subjectIri = assertion.getSubject().isIRI()
+                    ? assertion.getSubject().asIRI().map(IRI::toString).orElse(null)
+                    : null;
+            /**
+             * Filters assertions whose subject isn't even part of the ontology under test.
+             */
+            if (ownIri != null && (subjectIri == null || !ownSignature.contains(IRI.create(subjectIri)))) {
+                return;
+            }
+
+            /** Filters out self references */
             if (ownIri != null && value.startsWith(stripFragment(ownIri))) {
+                return;
+            }
+
+            if (!seenIRIs.add(value)) {
                 return;
             }
 
@@ -90,12 +112,15 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
              * It is not in our collection of ontologies and Does not match the known
              * pattern
              */
-            if (!inCorpus && !resolvesToOntology(value)) {
-                /**
-                 * try to resolve the IRI to get the actual resource to see whether is
-                 * it actually an ontology or just an external web resource
-                 */
-                return;
+
+            if (!inCorpus) {
+                if (!resolvesToOntology(value)) {
+                    /**
+                     * try to resolve the IRI to get the actual resource to see whether is
+                     * it actually an ontology or just an external web resource
+                     */
+                    return;
+                }
             }
 
             /**
@@ -107,6 +132,10 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
 
             /** Looks whether the IRI has an associated version date */
             boolean pinned = IriRegistryMatcher.looksVersionPinned(value);
+
+            if (!seenAcronyms.add(reusedAcronym)) {
+                return;
+            }
 
             relationships.add(new ReuseRelationship(
                     record.getAcronym(),
@@ -124,34 +153,76 @@ public class AnnotationProvenanceDetector implements ReuseDetector {
     /************************** HELPERS *******************************************/
     /******************************************************************************/
 
-    // private boolean looksLikeOntology(String iri) {
-    // if (NON_ONTOLOGY_SHAPE.matcher(iri).matches()) {
-    // return false;
-    // }
-    // return ONTOLOGY_IRI_SHAPE.matcher(iri).matches();
-    // }
-
     private String stripFragment(String iri) {
         int hashIdx = iri.indexOf('#');
         return hashIdx >= 0 ? iri.substring(0, hashIdx) : iri;
     }
 
+    private Set<IRI> computeNativeSignature(OntologyRecord record, OWLOntology ontology) {
+
+        String filePath = record.getFilePath();
+
+        if (filePath == null || filePath.isBlank() || !new File(filePath).isFile()) {
+            /**
+             * No real backing file to re-parse in isolation (e.g. in-memory test
+             * fixtures) -- fall back to the ontology object's own signature.
+             */
+            return ontology.signature(Imports.EXCLUDED)
+                    .map(entity -> entity.getIRI())
+                    .collect(Collectors.toSet());
+        }
+
+        try {
+            OWLOntologyManager isolatedManager = OWLManager.createOWLOntologyManager();
+
+            /**
+             * Force every import to fail to resolve, regardless of whether it's
+             * locally cached or fetchable over the network -- guarantees nothing
+             * from an import (headerless or not) can fuse into this parse.
+             */
+            isolatedManager.getIRIMappers()
+                    .add(iri -> IRI.create("file:///dev/null/does-not-exist-" + iri.hashCode() + ".owl"));
+
+            isolatedManager.setOntologyLoaderConfiguration(
+                    isolatedManager.getOntologyLoaderConfiguration()
+                            .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT));
+
+            OWLOntology isolated = isolatedManager
+                    .loadOntologyFromOntologyDocument(new File(record.getFilePath()));
+
+            return isolated.signature(Imports.EXCLUDED)
+                    .map(entity -> entity.getIRI())
+                    .collect(Collectors.toSet());
+
+        } catch (OWLOntologyCreationException e) {
+            return ontology.signature(Imports.EXCLUDED)
+                    .map(entity -> entity.getIRI())
+                    .collect(Collectors.toSet());
+        }
+    }
+
     private boolean resolvesToOntology(String iri) {
         try {
+            /** Get the manager ready */
             OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-
+            /** Create an IRIDocumentSource, assuming the IRI to be URL */
             OWLOntologyDocumentSource source = new IRIDocumentSource(IRI.create(iri));
 
+            /** Set appropriate configurations */
             OWLOntologyLoaderConfiguration config = new OWLOntologyLoaderConfiguration()
-                    .setMissingImportHandlingStrategy(
-                            MissingImportHandlingStrategy.SILENT);
+                    .setConnectionTimeout(15_000)
+                    .setFollowRedirects(true)
+                    .setRetriesToAttempt(0)
+                    .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT);
+
+            // System.out.println("[DEBUG] processed IRI values: " + iri);
 
             OWLOntology ontology = manager.loadOntologyFromOntologyDocument(source, config);
 
             return ontology.getOntologyID().getOntologyIRI().isPresent();
 
         } catch (OWLOntologyCreationException | RuntimeException e) {
-            return false;
+            return true;
         }
     }
 }
