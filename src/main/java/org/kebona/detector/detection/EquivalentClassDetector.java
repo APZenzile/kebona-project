@@ -1,8 +1,10 @@
 package org.kebona.detector.detection;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.kebona.detector.model.OntologyRecord;
 import org.kebona.detector.model.ReuseMechanism;
@@ -10,6 +12,7 @@ import org.kebona.detector.model.ReuseRelationship;
 import org.semanticweb.owlapi.model.AxiomType;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.parameters.Imports;
 
 /**
  * First-cut interpretation (not previously designed -- see handoff).
@@ -30,11 +33,18 @@ public class EquivalentClassDetector implements ReuseDetector {
     public List<ReuseRelationship> detect(OWLOntology ontology, OntologyRecord record,
             List<OntologyRecord> registry) {
         List<ReuseRelationship> relationships = new ArrayList<>();
+        Set<String> seenAcronyms = new HashSet<>();
+        Set<String> seenIRIs = new HashSet<>();
+
         String ownIri = record.getOntologyIri();
 
-        ontology.axioms(AxiomType.EQUIVALENT_CLASSES).forEach(axiom -> {
+        ontology.axioms(AxiomType.EQUIVALENT_CLASSES, Imports.EXCLUDED).forEach(axiom -> {
             List<OWLClass> classes = axiom.getClassExpressions().stream()
                     .flatMap(ce -> ce.getClassesInSignature().stream()).toList();
+
+            if (ownIri == null) {
+                return;
+            }
 
             OWLClass ownClass = null;
 
@@ -45,18 +55,44 @@ public class EquivalentClassDetector implements ReuseDetector {
                 }
             }
 
+            // System.out.println("Own class is: " + ownClass.getIRI().toString());
+            System.out.println("Length: " + classes.size());
+
             for (OWLClass externalClass : classes) {
+
+                // System.out.println(externalClass == ownClass);
+
+                // if (externalClass != ownClass) {
+                // System.err.println("external class: " + externalClass.getIRI().toString());
+                // }
 
                 if (externalClass.equals(ownClass)) {
                     continue;
                 }
 
                 String declaredIri = externalClass.getIRI().toString();
+
+                if (!seenIRIs.add(declaredIri)) {
+                    return;
+                }
+
                 Optional<OntologyRecord> matched = IriRegistryMatcher.matchEntity(declaredIri, registry);
                 boolean inCorpus = matched.isPresent();
+
                 String reusedAcronym = matched.map(OntologyRecord::getAcronym)
-                        .orElseGet(() -> IriRegistryMatcher.guessAcronym(declaredIri));
+                        .orElseGet(() -> IriRegistryMatcher.guessAcronymForEquivalence(declaredIri));
+                String ownAcronym = record.getAcronym();
+
+                if (reusedAcronym != null
+                        && (reusedAcronym.equals(ownAcronym) || reusedAcronym.contains(ownAcronym.toUpperCase()))) {
+                    return;
+                }
+
                 boolean pinned = IriRegistryMatcher.looksVersionPinned(declaredIri);
+
+                if (!seenAcronyms.add(reusedAcronym)) {
+                    return;
+                }
 
                 relationships.add(new ReuseRelationship(
                         record.getAcronym(),
@@ -74,6 +110,9 @@ public class EquivalentClassDetector implements ReuseDetector {
         if (ownIri == null) {
             return false;
         }
+        // System.out.println(owlClass.getIRI().getNamespace());
+        // System.err.println(stripFragment(ownIri));
+        // System.err.println("seperator");
         return owlClass.getIRI().getNamespace().startsWith(stripFragment(ownIri));
     }
 

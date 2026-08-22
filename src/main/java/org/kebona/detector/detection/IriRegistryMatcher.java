@@ -20,16 +20,55 @@ final class IriRegistryMatcher {
             return Optional.empty();
         }
 
+        /** First tries exact ontology/version IRI matches */
         for (OntologyRecord record : registry) {
-            if (candidateIri.equals(record.getOntologyIri())) {
+            if (record.getOntologyIri() != null &&
+                    candidateIri.equals(record.getOntologyIri())) {
+                return Optional.of(record);
+            }
+
+            if (record.getVersionIri() != null &&
+                    candidateIri.equals(record.getVersionIri())) {
                 return Optional.of(record);
             }
         }
 
-        String lowerIri = candidateIri.toLowerCase();
+        /** No exact match. Identifies the ontology from the IRI. */
+        String candidateAcronym = guessAcronym(candidateIri);
+
+        /** Check whether that identified ontology exists in the registry. */
         for (OntologyRecord record : registry) {
-            String acronym = record.getAcronym();
-            if (acronym != null && lowerIri.contains(acronym.toLowerCase())) {
+            if (record.getAcronym() != null &&
+                    record.getAcronym().equalsIgnoreCase(candidateAcronym)) {
+                return Optional.of(record);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    static Optional<OntologyRecord> matchEntity(String entityIri,
+            List<OntologyRecord> registry) {
+
+        if (entityIri == null) {
+            return Optional.empty();
+        }
+
+        for (OntologyRecord record : registry) {
+
+            String ontologyIri = record.getOntologyIri();
+            if (ontologyIri != null &&
+                    (entityIri.equals(ontologyIri)
+                            || entityIri.startsWith(ontologyIri + "#")
+                            || entityIri.startsWith(ontologyIri + "/"))) {
+                return Optional.of(record);
+            }
+
+            String versionIri = record.getVersionIri();
+            if (versionIri != null &&
+                    (entityIri.equals(versionIri)
+                            || entityIri.startsWith(versionIri + "#")
+                            || entityIri.startsWith(versionIri + "/"))) {
                 return Optional.of(record);
             }
         }
@@ -45,10 +84,32 @@ final class IriRegistryMatcher {
         if (iri == null) {
             return "UNKNOWN";
         }
+
         String cleaned = iri.replaceAll("/$", "");
         int lastSlash = cleaned.lastIndexOf('/');
-        String tail = lastSlash >= 0 ? cleaned.substring(lastSlash + 1) : cleaned;
+        String tail = lastSlash >= 0
+                ? cleaned.substring(lastSlash + 1)
+                : cleaned;
+
         return tail.replaceAll("\\.owl$", "").toUpperCase();
+    }
+
+    static String guessAcronymForEquivalence(String iri) {
+        if (iri == null) {
+            return "UNKNOWN";
+        }
+
+        String cleaned = iri.replaceAll("/$", "");
+        int lastSlash = cleaned.lastIndexOf('/');
+        String tail = lastSlash >= 0
+                ? cleaned.substring(lastSlash + 1)
+                : cleaned;
+
+        String acronym = tail.replaceAll("\\.owl$", "").toUpperCase();
+
+        acronym = cleanAcronym(acronym);
+
+        return acronym;
     }
 
     /**
@@ -62,5 +123,17 @@ final class IriRegistryMatcher {
         return iri.matches(".*/\\d{4}-\\d{2}-\\d{2}/.*")
                 || iri.matches(".*/v\\d+(\\.\\d+)*/.*")
                 || iri.matches(".*-\\d+\\.\\d+\\.owl$");
+    }
+
+    static String cleanAcronym(String acro) {
+        StringBuilder acronym = new StringBuilder();
+
+        for (Character c : acro.toCharArray()) {
+            if (Character.isLetter(c)) {
+                acronym.append(c);
+            }
+        }
+
+        return acronym.toString();
     }
 }
