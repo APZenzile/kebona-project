@@ -29,8 +29,7 @@ public class OntologyLoader {
         this.manager.setOntologyLoaderConfiguration(
                 this.manager.getOntologyLoaderConfiguration()
                         .setConnectionTimeout(100000)
-                        .setMissingImportHandlingStrategy(
-                                MissingImportHandlingStrategy.SILENT));
+                        .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT));
     }
 
     public OWLOntology load(OntologyRecord record) throws OWLOntologyCreationException {

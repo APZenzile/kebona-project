@@ -84,6 +84,10 @@ public class StalenessChecker {
 
     private Optional<LocalDate> fetchLatestDate(String bareOntologyIri) {
         OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
+        manager.setOntologyLoaderConfiguration(
+                manager.getOntologyLoaderConfiguration()
+                        .setConnectionTimeout(10000) // milliseconds
+        );
         manager.getOntologyConfigurator()
                 .setMissingImportHandlingStrategy(MissingImportHandlingStrategy.SILENT);
 

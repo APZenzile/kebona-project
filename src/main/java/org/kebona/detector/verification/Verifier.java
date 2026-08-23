@@ -1,13 +1,13 @@
 package org.kebona.detector.verification;
 
+import java.util.Map;
+
 import org.kebona.detector.model.OntologyRecord;
 import org.kebona.detector.model.ReuseRelationship;
 import org.kebona.detector.model.VerificationResult;
 import org.kebona.detector.model.VerificationResult.LinkStatus;
 import org.kebona.detector.model.VerificationResult.OverallStatus;
 import org.kebona.detector.model.VerificationResult.StalenessVerdict;
-
-import java.util.Map;
 
 /**
  * Combines StalenessChecker + LinkChecker into one verdict on the actual
@@ -49,15 +49,16 @@ public class Verifier {
         boolean isStale = staleness == StalenessVerdict.STALE;
         boolean isBroken = link == LinkStatus.BROKEN;
 
-        if (isStale && isBroken) {
+        if (isStale && isBroken)
             return OverallStatus.STALE_AND_BROKEN;
-        }
-        if (isStale) {
+        if (isStale)
             return OverallStatus.STALE;
-        }
-        if (isBroken) {
+        if (isBroken)
             return OverallStatus.BROKEN;
-        }
+        if (staleness == StalenessVerdict.UNKNOWN)
+            return OverallStatus.UNRESOLVABLE;
+        if (staleness == StalenessVerdict.NOT_APPLICABLE)
+            return OverallStatus.RELIABLE;
         return OverallStatus.RELIABLE;
     }
 }

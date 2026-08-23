@@ -9,9 +9,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.kebona.detector.detection.AlignmentDetector;
-import org.kebona.detector.detection.AnnotationProvenanceDetector;
 import org.kebona.detector.detection.EquivalentClassDetector;
-import org.kebona.detector.detection.ImportsDetector;
 import org.kebona.detector.detection.ReuseDetector;
 import org.kebona.detector.graph.Graph;
 import org.kebona.detector.graph.ReuseGraphBuilder;
@@ -19,11 +17,14 @@ import org.kebona.detector.loader.CatalogBuilder;
 import org.kebona.detector.loader.OntologyLoader;
 import org.kebona.detector.model.OntologyRecord;
 import org.kebona.detector.model.PipelineContext;
+import org.kebona.detector.model.ReuseMechanism;
 import org.kebona.detector.model.ReuseRelationship;
 import org.kebona.detector.model.VerificationResult;
 import org.kebona.detector.output.CliReporter;
 import org.kebona.detector.output.JsonResultWriter;
 import org.kebona.detector.registry.RegistryLoader;
+import org.kebona.detector.verification.LinkChecker;
+import org.kebona.detector.verification.StalenessChecker;
 import org.kebona.detector.verification.Verifier;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
@@ -52,10 +53,13 @@ public class Main {
         this.registryLoader = new RegistryLoader();
 
         /** Adds all the detectors. */
-        this.detectors.add(new ImportsDetector());
         this.detectors.add(new AlignmentDetector());
-        this.detectors.add(new AnnotationProvenanceDetector());
-        this.detectors.add(new EquivalentClassDetector());
+        // this.detectors.add(new ImportsDetector());
+        // this.detectors.add(new AnnotationProvenanceDetector());
+        // this.detectors.add(new AlignmentDetector());
+
+        this.verifier = new Verifier(new StalenessChecker(), new LinkChecker());
+        this.cliReporter = new CliReporter();
 
     }
 
@@ -68,10 +72,21 @@ public class Main {
     /** ------------------------------------------------------ */
 
     public void run() {
+        System.out.println("[INFO] LOADING REGISTRY...");
         loadRegistry();
+        System.out.println("[INFO] LOADING AND DETECTING...");
         loadAndDetect();
+        // System.exit(0);
+
+        System.out.println("[INFO] BUILDING GRAPH...");
         buildGraph();
+        Map<ReuseMechanism, Long> byMechanism = pipelineContext.getRelationships().stream()
+                .collect(Collectors.groupingBy(ReuseRelationship::getMechanism, Collectors.counting()));
+        System.out.println(byMechanism);
+
+        System.out.println("[INFO] VERIFYING RELATIONS...");
         verifyRelations();
+        System.out.println("[INFO] REPORT RESULTS...");
         report();
     }
 
@@ -89,21 +104,29 @@ public class Main {
         OntologyLoader loader = new OntologyLoader(catalogMapper.buildMapper(ontologyPath));
 
         List<OntologyRecord> registry = pipelineContext.getRegistry();
+        int i = 0;
 
         for (OntologyRecord record : registry) {
             OWLOntology ontology;
+
+            System.out.println("\t[INFO] about to load the a record..." + record.getAcronym());
+
             try {
                 ontology = loader.load(record);
+                System.out.println("\t[INFO] successfully loaded record: " + ++i + " " + record.getAcronym());
             } catch (OWLOntologyCreationException e) {
-                System.out.println("Failed to load " + record.getAcronym() + ": " + e.getMessage());
+                System.out.println("Failed to load " + record.getAcronym() + ": " +
+                        e.getMessage());
                 continue;
             }
-
+            System.err.println("\t[INFO] Detecting relations");
             for (ReuseDetector detector : this.detectors) {
                 List<ReuseRelationship> relations = detector.detect(ontology, record, registry);
                 pipelineContext.addRelationships(relations);
             }
         }
+
+        printRelations();
     }
 
     private void buildGraph() {
@@ -114,10 +137,15 @@ public class Main {
     private void verifyRelations() {
         Map<String, OntologyRecord> registryByAcronym = pipelineContext.getRegistry().stream()
                 .collect(Collectors.toMap(OntologyRecord::getAcronym, r -> r));
-
+        // int i = 0;
         for (ReuseRelationship relationship : pipelineContext.getRelationships()) {
+            // System.out.println("[INFO] about verify the relationship..");
             VerificationResult result = verifier.verify(relationship, registryByAcronym);
+            // System.out.println("[INFO] relationship confirmed..." + ++i);
             pipelineContext.addVerification(result);
+            // if (i == 100) {
+            // break;
+            // }
         }
     }
 
@@ -132,6 +160,17 @@ public class Main {
             new JsonResultWriter().write(this.outpuPath, registry, relationships, verifications);
         } catch (IOException e) {
             System.out.println("Failed to write JSON output: " + e.getMessage());
+        }
+    }
+
+    private void printRelations() {
+
+        System.out.println("Number of Relations: " + pipelineContext.getRelationships().size());
+
+        for (ReuseRelationship relation : pipelineContext.getRelationships()) {
+            System.out.println("==========================");
+            System.out.println(relation.getImportingOntology() + " ----> " + relation.getReusedOntology());
+            System.out.println("==========================");
         }
     }
 }
