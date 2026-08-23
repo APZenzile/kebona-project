@@ -33,7 +33,7 @@ public class LinkChecker {
     public LinkChecker() {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(TIMEOUT)
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.ALWAYS)
                 .build();
     }
 
@@ -46,8 +46,6 @@ public class LinkChecker {
         try {
             uri = URI.create(declaredIri);
         } catch (IllegalArgumentException e) {
-            // malformed IRI -- not a network problem, but not a meaningful
-            // request either, so there's nothing to have checked
             return LinkStatus.NOT_CHECKED;
         }
 
@@ -58,18 +56,22 @@ public class LinkChecker {
                     .timeout(TIMEOUT)
                     .build();
         } catch (IllegalArgumentException e) {
-            // e.g. unsupported scheme for an http client (not http/https)
             return LinkStatus.NOT_CHECKED;
         }
 
         try {
             HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
             int status = response.statusCode();
-            return (status >= 200 && status < 400) ? LinkStatus.OK : LinkStatus.BROKEN;
+
+            if (status >= 200 && status < 400)
+                return LinkStatus.OK;
+            else if (status == 401 || status == 403)
+                return LinkStatus.RESTRICTED;
+            return LinkStatus.BROKEN;
+
         } catch (IOException e) {
-            // connection-level failure: DNS, refused, timeout, no route --
-            // an actual HTTP exchange never happened, so we don't know
             return LinkStatus.NOT_CHECKED;
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return LinkStatus.NOT_CHECKED;

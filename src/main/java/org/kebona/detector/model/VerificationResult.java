@@ -106,11 +106,17 @@ public class VerificationResult {
      * data."
      */
     public enum StalenessVerdict {
-        STALE, CURRENT, NOT_APPLICABLE, UNKNOWN
+        STALE,
+        CURRENT,
+        NOT_APPLICABLE,
+        UNKNOWN
     }
 
     public enum LinkStatus {
-        OK, BROKEN, NOT_CHECKED
+        OK,
+        BROKEN,
+        RESTRICTED,
+        NOT_CHECKED
     }
 
     /**
