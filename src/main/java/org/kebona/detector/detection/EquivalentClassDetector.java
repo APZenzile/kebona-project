@@ -56,7 +56,6 @@ public class EquivalentClassDetector implements ReuseDetector {
             }
 
             // System.out.println("Own class is: " + ownClass.getIRI().toString());
-            System.out.println("Length: " + classes.size());
 
             for (OWLClass externalClass : classes) {
 
