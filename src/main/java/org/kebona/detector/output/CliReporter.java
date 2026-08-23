@@ -16,38 +16,46 @@ import org.kebona.detector.model.VerificationResult.OverallStatus;
  */
 public class CliReporter {
 
-    public void report(List<OntologyRecord> registry,
-            List<ReuseRelationship> relationships,
-            List<VerificationResult> verifications) {
+        public void report(List<OntologyRecord> registry,
+                        List<ReuseRelationship> relationships,
+                        List<VerificationResult> verifications) {
 
-        System.out.println("====== KeBoNa Ontology Reuse Detector: Summary =======");
-        System.out.println("Ontologies in registry:          " + registry.size());
-        System.out.println("Direct reuse relationships found: " + relationships.size());
-        System.out.println("Verifications completed:          " + verifications.size());
-        System.out.println();
+                System.out.println("====== KeBoNa Ontology Reuse Detector: Summary =======");
+                System.out.println("Ontologies in registry:          " + registry.size());
+                System.out.println("Direct reuse relationships found: " + relationships.size());
+                System.out.println("Verifications completed:          " + verifications.size());
+                System.out.println();
 
-        if (!verifications.isEmpty()) {
-            Map<OverallStatus, Long> counts = verifications.stream()
-                    .collect(Collectors.groupingBy(VerificationResult::getOverallStatus, Collectors.counting()));
+                if (!verifications.isEmpty()) {
+                        Map<OverallStatus, Long> counts = verifications.stream()
+                                        .collect(Collectors.groupingBy(VerificationResult::getOverallStatus,
+                                                        Collectors.counting()));
 
-            System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>> Overall status breakdown <<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-            for (OverallStatus status : OverallStatus.values()) {
-                System.out.println(status + ": " + counts.getOrDefault(status, 0L));
-            }
-            System.out.println();
+                        System.out.println(
+                                        ">>>>>>>>>>>>>>>>>>>>>>>>> Overall Status Breakdown <<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+                        for (OverallStatus status : OverallStatus.values()) {
+                                System.out.println(status + ": " + counts.getOrDefault(status, 0L));
+                        }
+                        System.out.println(
+                                        ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+                        System.out.println();
+                }
+
+                System.out.println(
+                                "========================================== RELATIONS =============================================");
+                System.out.println(
+                                "==================================================================================================");
+                System.out.printf("%-12s %-12s %-22s %-10s %-70s%n", "FROM", "TO", "MECHANISM", "IN CORPUS", "IRI");
+                System.out.println(
+                                "==================================================================================================");
+                for (ReuseRelationship r : relationships) {
+                        System.out.printf(
+                                        "%-12s %-12s %-22s %-10s %-70s%n",
+                                        r.getImportingOntology(),
+                                        r.getReusedOntology(),
+                                        r.getMechanism(),
+                                        r.isReusedOntologyInCorpus(),
+                                        r.getDeclaredIri());
+                }
         }
-
-        System.out.println("============================= RELATIONS =========================");
-        System.out.printf("%-12s %-12s %-22s %-10s %-60s%n", "FROM", "TO", "MECHANISM", "IN CORPUS", "IRI");
-        System.out.println("====================================================================================");
-        for (ReuseRelationship r : relationships) {
-            System.out.printf(
-                    "%-12s %-12s %-22s %-10s %-60s%n",
-                    r.getImportingOntology(),
-                    r.getReusedOntology(),
-                    r.getMechanism(),
-                    r.isReusedOntologyInCorpus(),
-                    r.getDeclaredIri());
-        }
-    }
 }

@@ -1,6 +1,7 @@
 package org.kebona.detector.detection;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -11,6 +12,7 @@ import org.kebona.detector.model.ReuseRelationship;
 import org.semanticweb.owlapi.model.AxiomType;
 import org.semanticweb.owlapi.model.IRI;
 import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.parameters.Imports;
 
 /**
  * First-cut interpretation -- and genuinely the least settled of the four.
@@ -43,30 +45,44 @@ public class AlignmentDetector implements ReuseDetector {
     public List<ReuseRelationship> detect(OWLOntology ontology, OntologyRecord record, List<OntologyRecord> registry) {
         /** Sets up a list of relationships to collect from detecting. */
         List<ReuseRelationship> relationships = new ArrayList<>();
+        Set<String> seenAcronyms = new HashSet<>();
+        Set<String> seenIRIs = new HashSet<>();
         /** Get the universal identifier for the current ontology */
         String ownIri = record.getOntologyIri();
 
-        ontology.axioms(AxiomType.ANNOTATION_ASSERTION).forEach(axiom -> {
+        ontology.axioms(AxiomType.ANNOTATION_ASSERTION, Imports.EXCLUDED).forEach(axiom -> {
             /** Narrow down the search space to only the skos alignment properties */
             if (!SKOS_MAPPING_PROPERTIES.contains(axiom.getProperty().getIRI())) {
                 return;
             }
 
             String targetIri = axiom.getValue().asIRI().map(IRI::toString).orElse(null);
+
             if (targetIri == null) {
                 return;
             }
 
-            /** Might have to double checkl this during testing. */
+            System.out.println("[DEBUG] Processed --> " + targetIri);
+
+            /** Filter against duplication of IRIs */
+            if (!seenIRIs.add(targetIri)) {
+                return;
+            }
+
+            /** Filter against self referencing */
             if (ownIri != null && targetIri.startsWith(stripFragment(ownIri))) {
                 return;
             }
 
             Optional<OntologyRecord> matched = IriRegistryMatcher.matchEntity(targetIri, registry);
             boolean inCorpus = matched.isPresent();
-            String reusedAcronym = matched.map(OntologyRecord::getAcronym)
-                    .orElseGet(() -> IriRegistryMatcher.guessAcronym(targetIri));
+            String reusedAcronym = matched.map(OntologyRecord::getAcronym).orElseGet(
+                    () -> IriRegistryMatcher.guessAcronym(targetIri));
             boolean pinned = IriRegistryMatcher.looksVersionPinned(targetIri);
+
+            if (!seenAcronyms.add(reusedAcronym)) {
+                return;
+            }
 
             relationships.add(new ReuseRelationship(
                     record.getAcronym(),
