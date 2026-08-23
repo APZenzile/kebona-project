@@ -59,6 +59,7 @@ public class Verifier {
             return OverallStatus.UNRESOLVABLE;
         if (staleness == StalenessVerdict.NOT_APPLICABLE)
             return OverallStatus.RELIABLE;
+
         return OverallStatus.RELIABLE;
     }
 }

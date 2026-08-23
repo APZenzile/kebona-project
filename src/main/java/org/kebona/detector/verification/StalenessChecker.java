@@ -2,6 +2,8 @@ package org.kebona.detector.verification;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,8 +28,17 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 public class StalenessChecker {
 
     // matches a bare YYYY-MM-DD anywhere in a versionIRI or versionInfo string
-    private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
+    // private static final Pattern DATE_PATTERN =
+    // Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
+
+    private static final List<DatePattern> DATE_PATTERNS = List.of(
+            new DatePattern(Pattern.compile("(\\d{4}-\\d{2}-\\d{2})"), "yyyy-MM-dd"),
+            new DatePattern(Pattern.compile("(\\d{4}/\\d{2}/\\d{2})"), "yyyy/MM/dd"),
+            new DatePattern(Pattern.compile("(\\d{4}\\.\\d{2}\\.\\d{2})"), "yyyy.MM.dd"),
+            new DatePattern(Pattern.compile("\\b(\\d{8})\\b"), "yyyyMMdd"));
+
+    // private static final DateTimeFormatter DATE_FORMAT =
+    // DateTimeFormatter.ISO_LOCAL_DATE;
 
     public StalenessVerdict check(ReuseRelationship relationship, OntologyRecord reusedRecord) {
 
@@ -71,15 +82,27 @@ public class StalenessChecker {
         if (source == null) {
             return Optional.empty();
         }
-        Matcher matcher = DATE_PATTERN.matcher(source);
-        if (matcher.find()) {
-            try {
-                return Optional.of(LocalDate.parse(matcher.group(1), DATE_FORMAT));
-            } catch (Exception e) {
-                return Optional.empty();
+
+        for (DatePattern datePattern : DATE_PATTERNS) {
+            Matcher matcher = datePattern.pattern().matcher(source);
+            if (matcher.find()) {
+                try {
+                    return Optional.of(LocalDate.parse(matcher.group(1), datePattern.formatter()));
+                } catch (DateTimeParseException e) {
+                    // matched the shape but not a real calendar date (e.g. "9999-99-99")
+                    // -- keep trying subsequent patterns rather than giving up entirely
+                    continue;
+                }
             }
         }
+
         return Optional.empty();
+    }
+
+    private record DatePattern(Pattern pattern, String formatPattern) {
+        DateTimeFormatter formatter() {
+            return DateTimeFormatter.ofPattern(formatPattern);
+        }
     }
 
     private Optional<LocalDate> fetchLatestDate(String bareOntologyIri) {
